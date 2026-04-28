@@ -2,7 +2,13 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  static const _base = 'http://dokaebi.iptime.org:58000';
+  static String get _base {
+    final host = Uri.base.host;
+    if (host == 'localhost' || host == '127.0.0.1') {
+      return 'http://dokaebi.iptime.org:58000';
+    }
+    return '${Uri.base.scheme}://${Uri.base.host}/launch/api';
+  }
 
   static String get todayString {
     final now = DateTime.now();
