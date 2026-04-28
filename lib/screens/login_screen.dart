@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../models/app_user.dart';
 import '../services/api_service.dart';
 import 'home_screen.dart';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -21,6 +24,10 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
+      if (kIsWeb) {
+        final el = html.document.querySelector('flt-glass-pane');
+        if (el is html.HtmlElement) el.focus();
+      }
     });
   }
 
