@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:http/http.dart' as http;
-import 'package:launch_frontend/app.dart';
-import 'package:launch_frontend/bloc/dashboard/launch_dashboard_bloc.dart';
-import 'package:launch_frontend/data/datasources/launch_remote_data_source.dart';
-import 'package:launch_frontend/data/repositories/launch_repository_impl.dart';
-import 'package:launch_frontend/domain/usecases/get_dashboard_data_usecase.dart';
+import 'screens/login_screen.dart';
 
 void main() {
-  final client = http.Client();
-  final remoteDataSource = LaunchRemoteDataSourceImpl(client);
-  final repository = LaunchRepositoryImpl(remoteDataSource);
-  final getDashboardDataUseCase = GetDashboardDataUseCase(repository);
+  runApp(const LunchPickApp());
+}
 
-  runApp(
-    BlocProvider(
-      create: (_) => LaunchDashboardBloc(getDashboardDataUseCase),
-      child: const LaunchApp(),
-    ),
-  );
+class LunchPickApp extends StatelessWidget {
+  const LunchPickApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: '점심 픽',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFF6B35)),
+        useMaterial3: true,
+      ),
+      home: const LoginScreen(),
+    );
+  }
 }
