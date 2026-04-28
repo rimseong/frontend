@@ -17,4 +17,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           command_timeout: 10m
           script: |
-            docker exec launch_app bash -c "cd /workspace/frontend && git fetch origin && git reset --hard origin/main"
+            cd /tmp && rm -rf frontend-deploy-tmp
+            git clone https://github.com/rimseong/frontend frontend-deploy-tmp
+            docker cp frontend-deploy-tmp/web/. launch_app:/workspace/frontend/web/
+            rm -rf /tmp/frontend-deploy-tmp
