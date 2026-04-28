@@ -19,5 +19,5 @@ jobs:
           script: |
             cd /tmp && rm -rf frontend-deploy-tmp
             git clone https://github.com/rimseong/frontend frontend-deploy-tmp
-            docker cp frontend-deploy-tmp/web/. launch_app:/workspace/frontend/web/
+            docker cp frontend-deploy-tmp/web/. launch_app:/workspace/frontend/build/web/
             rm -rf /tmp/frontend-deploy-tmp
