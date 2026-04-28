@@ -17,4 +17,4 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           command_timeout: 10m
           script: |
-            docker exec launch_app bash -c "cd /workspace/frontend && git fetch origin && git reset --hard origin/main && flutter pub get && flutter build web --release"
+            docker exec launch_app bash -c "cd /workspace/frontend && git fetch origin && git reset --hard origin/main && flutter pub get && flutter build web --release && cp -rf build/web/. web/"
