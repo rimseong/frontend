@@ -34,6 +34,17 @@
 </head>
 <body>
   <script>
+    // Flutter canvas가 렌더링되면 즉시 포커스 부여 (첫 클릭 없이 키보드 입력 가능)
+    const _observer = new MutationObserver(function() {
+      const pane = document.querySelector('flt-glass-pane');
+      if (pane) {
+        pane.setAttribute('tabindex', '0');
+        pane.focus();
+        _observer.disconnect();
+      }
+    });
+    _observer.observe(document.body, { childList: true, subtree: true });
+
     window.addEventListener('load', function(ev) {
       _flutter.loader.load({
         serviceWorkerSettings: {
