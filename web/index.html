@@ -33,10 +33,12 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
-  <!-- 브라우저 포커스 활성화용 숨김 input (Flutter 텍스트 입력 첫 클릭 문제 해결) -->
-  <input autofocus style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;" tabindex="-1">
+  <!-- 브라우저 포커스 활성화용 숨김 input -->
+  <input autofocus style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;">
   <script>
-    // Flutter가 완전히 초기화된 후 canvas 포커스
+    window.focus();
+
+    // Flutter 초기화 후 glass pane 포커스
     const _observer = new MutationObserver(function() {
       const pane = document.querySelector('flt-glass-pane');
       if (pane) {
@@ -44,7 +46,7 @@
         setTimeout(function() {
           pane.setAttribute('tabindex', '0');
           pane.focus();
-        }, 500);
+        }, 1000);
       }
     });
     _observer.observe(document.body, { childList: true, subtree: true });
