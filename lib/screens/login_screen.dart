@@ -96,6 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
               TextField(
                 controller: _controller,
                 focusNode: _focusNode,
+                autofocus: true,
                 keyboardType: TextInputType.text,
                 onSubmitted: (_) => _login(),
                 decoration: InputDecoration(

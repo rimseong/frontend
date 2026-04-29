@@ -33,14 +33,18 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <!-- 브라우저 포커스 활성화용 숨김 input (Flutter 텍스트 입력 첫 클릭 문제 해결) -->
+  <input autofocus style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;" tabindex="-1">
   <script>
-    // Flutter canvas가 렌더링되면 즉시 포커스 부여 (첫 클릭 없이 키보드 입력 가능)
+    // Flutter가 완전히 초기화된 후 canvas 포커스
     const _observer = new MutationObserver(function() {
       const pane = document.querySelector('flt-glass-pane');
       if (pane) {
-        pane.setAttribute('tabindex', '0');
-        pane.focus();
         _observer.disconnect();
+        setTimeout(function() {
+          pane.setAttribute('tabindex', '0');
+          pane.focus();
+        }, 500);
       }
     });
     _observer.observe(document.body, { childList: true, subtree: true });
