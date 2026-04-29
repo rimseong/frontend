@@ -4,6 +4,7 @@ class Restaurant {
   final String id;
   final String name;
   final String? category;
+  final String? phone;
   final List<MenuItem> menuItems;
   final bool isPreRegistered;
   int? serverId;
@@ -12,6 +13,7 @@ class Restaurant {
     required this.id,
     required this.name,
     this.category,
+    this.phone,
     this.menuItems = const [],
     this.isPreRegistered = false,
     this.serverId,
@@ -21,6 +23,7 @@ class Restaurant {
     String? id,
     String? name,
     String? category,
+    String? phone,
     List<MenuItem>? menuItems,
     bool? isPreRegistered,
   }) {
@@ -28,6 +31,7 @@ class Restaurant {
       id: id ?? this.id,
       name: name ?? this.name,
       category: category ?? this.category,
+      phone: phone ?? this.phone,
       menuItems: menuItems ?? this.menuItems,
       isPreRegistered: isPreRegistered ?? this.isPreRegistered,
     );

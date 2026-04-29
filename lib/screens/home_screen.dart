@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/session.dart';
 import '../models/member.dart';
 import '../models/restaurant.dart';
@@ -26,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Session> _sessions = [];
   bool _isLoading = false;
   bool _isNonParticipant = false;
+  int? _nonParticipantSelectionId;
 
   @override
   void initState() {
@@ -80,6 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadSessionsFromServer() async {
+    if (mounted) setState(() { _isNonParticipant = false; _nonParticipantSelectionId = null; });
     try {
       final selections = await ApiService.listSelectionsToday();
       if (selections.isEmpty) return;
@@ -127,6 +130,21 @@ class _HomeScreenState extends State<HomeScreen> {
             isPreRegistered: false,
             serverId: restaurantServerId,
           );
+        }
+
+        // 미참여 식당이면 현재 사용자 상태 설정 후 세션 생성 스킵
+        if (restaurant.name == ApiService.nonParticipantName) {
+          final currentUserId = widget.currentUser.id;
+          for (final sel in restaurantSelections) {
+            if (sel['user_id'] == currentUserId) {
+              if (mounted) setState(() {
+                _isNonParticipant = true;
+                _nonParticipantSelectionId = sel['id'] as int?;
+              });
+              break;
+            }
+          }
+          continue;
         }
 
         // 멤버 구성
@@ -252,11 +270,33 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
-    if (mounted) setState(() => _isNonParticipant = true);
+    try {
+      final np = await ApiService.ensureNonParticipant();
+      final result = await ApiService.createSelection(
+        userId: currentUser.id,
+        restaurantId: np['restaurantId']!,
+        menuId: np['menuId']!,
+        price: 0,
+      );
+      if (mounted) setState(() {
+        _isNonParticipant = true;
+        _nonParticipantSelectionId = result['id'] as int?;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isNonParticipant = true);
+    }
   }
 
-  void _cancelNonParticipant() {
-    setState(() => _isNonParticipant = false);
+  void _cancelNonParticipant() async {
+    if (_nonParticipantSelectionId != null) {
+      try {
+        await ApiService.deleteSelection(_nonParticipantSelectionId!);
+      } catch (_) {}
+    }
+    if (mounted) setState(() {
+      _isNonParticipant = false;
+      _nonParticipantSelectionId = null;
+    });
   }
 
   void _cancelVote(Session session) async {
@@ -473,6 +513,58 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     if (mounted) setState(() {});
+  }
+
+  void _editRestaurantPhone(Session session, Restaurant restaurant) async {
+    final controller = TextEditingController(text: restaurant.phone ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${restaurant.name} 전화번호'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(hintText: '전화번호 입력 (예: 02-1234-5678)'),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          if (restaurant.phone != null)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, ''),
+              child: const Text('삭제', style: TextStyle(color: Colors.red)),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('확인', style: TextStyle(color: Color(0xFFFF6B35))),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null || !mounted) return;
+
+    final newPhone = result.isEmpty ? null : result;
+    final updated = Restaurant(
+      id: restaurant.id,
+      name: restaurant.name,
+      category: restaurant.category,
+      phone: newPhone,
+      menuItems: restaurant.menuItems,
+      isPreRegistered: restaurant.isPreRegistered,
+      serverId: restaurant.serverId,
+    );
+
+    setState(() {
+      final sIdx = session.restaurants.indexOf(restaurant);
+      if (sIdx != -1) session.restaurants[sIdx] = updated;
+      final gIdx = serverRestaurants.indexOf(restaurant);
+      if (gIdx != -1) serverRestaurants[gIdx] = updated;
+    });
   }
 
   void _openSession(Session session) async {
@@ -906,6 +998,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 onDelete: () => _deleteSession(session),
                                 onCancelVote: () => _cancelVote(session),
                                 onSelectTreasurer: () => _selectTreasurer(session),
+                                onEditPhone: (r) => _editRestaurantPhone(session, r),
                               )),
                               if (_isNonParticipant)
                                 _NonParticipantCard(
@@ -925,7 +1018,7 @@ class _HomeScreenState extends State<HomeScreen> {
               heroTag: 'statistics',
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const StatisticsScreen()),
+                MaterialPageRoute(builder: (_) => StatisticsScreen(currentUserId: widget.currentUser.id)),
               ),
               backgroundColor: Colors.white,
               foregroundColor: const Color(0xFF1A1A1A),
@@ -1031,6 +1124,7 @@ class _SessionCard extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onCancelVote;
   final VoidCallback onSelectTreasurer;
+  final void Function(Restaurant restaurant) onEditPhone;
 
   const _SessionCard({
     required this.session,
@@ -1045,6 +1139,7 @@ class _SessionCard extends StatelessWidget {
     required this.onDelete,
     required this.onCancelVote,
     required this.onSelectTreasurer,
+    required this.onEditPhone,
   });
 
   @override
@@ -1067,6 +1162,8 @@ class _SessionCard extends StatelessWidget {
     final canReVote = currentUserId != null &&
         session.selectedRestaurantId != null &&
         currentMember?.selectedMenuItemId != null;
+    // 세션에 속해 있으면 언제든 취소 가능 (메뉴 미선택 포함)
+    final canCancel = currentUserId != null && currentMember != null;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1106,13 +1203,6 @@ class _SessionCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  if (session.creatorId != null &&
-                      session.creatorId == currentUserId)
-                    GestureDetector(
-                      onTap: onDelete,
-                      child: Icon(Icons.delete_outline, size: 18, color: Colors.grey[400]),
-                    ),
                 ],
               ),
               if (session.restaurants.isNotEmpty) ...[
@@ -1120,26 +1210,69 @@ class _SessionCard extends StatelessWidget {
                 Wrap(
                   spacing: 6,
                   runSpacing: 4,
-                  children: session.restaurants.map((r) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFEDE5),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.restaurant, size: 12, color: Color(0xFFFF6B35)),
-                        const SizedBox(width: 4),
-                        Text(
-                          r.name,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFFFF6B35),
-                            fontWeight: FontWeight.w600,
+                  children: session.restaurants.map((r) => GestureDetector(
+                    onTap: r.phone != null
+                        ? () => showModalBottomSheet(
+                            context: context,
+                            backgroundColor: Colors.white,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                            ),
+                            builder: (ctx) => SafeArea(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const SizedBox(height: 8),
+                                  Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+                                  const SizedBox(height: 16),
+                                  Text(r.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                                  Text(r.phone!, style: TextStyle(fontSize: 13, color: Colors.grey[500])),
+                                  const SizedBox(height: 12),
+                                  ListTile(
+                                    leading: const CircleAvatar(backgroundColor: Color(0xFFFFEDE5), child: Icon(Icons.phone, color: Color(0xFFFF6B35), size: 20)),
+                                    title: const Text('전화하기'),
+                                    onTap: () { Navigator.pop(ctx); launchUrl(Uri(scheme: 'tel', path: r.phone)); },
+                                  ),
+                                  ListTile(
+                                    leading: CircleAvatar(backgroundColor: Colors.grey[100], child: Icon(Icons.edit_outlined, color: Colors.grey[600], size: 20)),
+                                    title: const Text('전화번호 수정'),
+                                    onTap: () { Navigator.pop(ctx); onEditPhone(r); },
+                                  ),
+                                  const SizedBox(height: 8),
+                                ],
+                              ),
+                            ),
+                          )
+                        : () => onEditPhone(r),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFEDE5),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.restaurant, size: 12, color: Color(0xFFFF6B35)),
+                          const SizedBox(width: 4),
+                          Text(
+                            r.name,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFFFF6B35),
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 6),
+                          Icon(
+                            r.phone != null ? Icons.phone : Icons.phone_outlined,
+                            size: 12,
+                            color: r.phone != null
+                                ? const Color(0xFFFF6B35)
+                                : Colors.grey[400],
+                          ),
+                        ],
+                      ),
                     ),
                   )).toList(),
                 ),
@@ -1276,7 +1409,7 @@ class _SessionCard extends StatelessWidget {
                   ],
                 ),
               ],
-              if (canReVote) ...[
+              if (canCancel) ...[
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,

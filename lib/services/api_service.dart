@@ -199,6 +199,44 @@ class ApiService {
     return (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
   }
 
+  static const String nonParticipantName = '미참여';
+
+  static Future<Map<String, int>> ensureNonParticipant() async {
+    final restaurants = await listRestaurants();
+    Map<String, dynamic>? rData;
+    try {
+      rData = restaurants.firstWhere((r) => r['name'] == nonParticipantName);
+    } catch (_) {}
+
+    final int restaurantId;
+    if (rData == null) {
+      final created = await createRestaurant(nonParticipantName);
+      restaurantId = created['id'] as int;
+    } else {
+      restaurantId = rData['id'] as int;
+    }
+
+    final menus = await listMenus(restaurantId);
+    Map<String, dynamic>? mData;
+    try {
+      mData = menus.firstWhere((m) => m['name'] == nonParticipantName);
+    } catch (_) {}
+
+    final int menuId;
+    if (mData == null) {
+      final created = await createMenu(
+        restaurantId: restaurantId,
+        name: nonParticipantName,
+        price: 0,
+      );
+      menuId = created['id'] as int;
+    } else {
+      menuId = mData['id'] as int;
+    }
+
+    return {'restaurantId': restaurantId, 'menuId': menuId};
+  }
+
   static Future<Map<String, dynamic>> createSelection({
     required int userId,
     required int restaurantId,

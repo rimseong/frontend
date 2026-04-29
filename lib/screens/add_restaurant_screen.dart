@@ -252,6 +252,7 @@ class _AddCustomMenuScreen extends StatefulWidget {
 }
 
 class _AddCustomMenuScreenState extends State<_AddCustomMenuScreen> {
+  final _phoneController = TextEditingController();
   final _menuNameController = TextEditingController();
   final _menuPriceController = TextEditingController();
   final List<MenuItem> _menuItems = [];
@@ -316,6 +317,7 @@ class _AddCustomMenuScreenState extends State<_AddCustomMenuScreen> {
       final restaurant = Restaurant(
         id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
         name: widget.restaurantName,
+        phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
         menuItems: _menuItems,
         isPreRegistered: false,
         serverId: serverRestaurantId,
@@ -356,6 +358,36 @@ class _AddCustomMenuScreenState extends State<_AddCustomMenuScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '전화번호',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      hintText: '전화번호 입력 (선택)',
+                      prefixIcon: const Icon(Icons.phone_outlined, size: 20),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -551,7 +583,7 @@ class _AddCustomMenuScreenState extends State<_AddCustomMenuScreen> {
                         ),
                       )
                     : Text(
-                        _menuItems.isEmpty ? '메뉴 없이 추가' : '식당 추가 완료',
+                        _menuItems.isEmpty ? '식당만 추가하기' : '식당 추가 완료',
                         style: const TextStyle(
                             fontSize: 16, fontWeight: FontWeight.bold),
                       ),

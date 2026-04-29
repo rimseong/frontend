@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../utils/format.dart';
 
 class StatisticsScreen extends StatefulWidget {
-  const StatisticsScreen({super.key});
+  final int currentUserId;
+  const StatisticsScreen({super.key, required this.currentUserId});
 
   @override
   State<StatisticsScreen> createState() => _StatisticsScreenState();
@@ -16,6 +19,17 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   String? _selectedDate;
 
   List<Map<String, dynamic>> _days = [];
+  String? _treasurerName;
+
+  // 정산
+  Map<String, int> _toReceive = {};
+  Map<String, int> _toPay = {};
+  bool _settlementLoading = false;
+  int _myMonthlyTotal = 0;
+
+  // 내 계좌
+  String _accountBank = '';
+  String _accountNumber = '';
 
   static const _weekdayLabels = ['월', '화', '수', '목', '금', '토', '일'];
 
@@ -23,10 +37,173 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   void initState() {
     super.initState();
     _loadData();
+    _loadAccount();
+  }
+
+  Future<void> _loadAccount() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _accountBank = prefs.getString('account_bank') ?? '';
+        _accountNumber = prefs.getString('account_number') ?? '';
+      });
+    }
+  }
+
+  void _copySettlementMessage() {
+    final lastDay = DateTime(_year, _month + 1, 0).day;
+    final buf = StringBuffer();
+    buf.writeln('[점심 정산 안내] $_month월');
+    if (_accountBank.isNotEmpty || _accountNumber.isNotEmpty) {
+      buf.writeln('계좌: $_accountBank $_accountNumber');
+    }
+    buf.writeln('정산일: $_month월 $lastDay일');
+    buf.writeln();
+    for (final e in _toReceive.entries) {
+      buf.writeln('${e.key}  ${formatPrice(e.value)}원');
+    }
+    Clipboard.setData(ClipboardData(text: buf.toString().trim()));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('정산 메시지가 복사되었습니다'), duration: Duration(seconds: 2)),
+    );
+  }
+
+  Future<void> _editAccount() async {
+    final bankCtrl = TextEditingController(text: _accountBank);
+    final numCtrl = TextEditingController(text: _accountNumber);
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('내 계좌번호'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: bankCtrl,
+              decoration: const InputDecoration(hintText: '은행명 (예: 국민은행)'),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: numCtrl,
+              keyboardType: TextInputType.text,
+              decoration: const InputDecoration(hintText: '계좌번호 (예: 123-456-789012)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('저장', style: TextStyle(color: Color(0xFFFF6B35))),
+          ),
+        ],
+      ),
+    );
+    if (result != true || !mounted) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('account_bank', bankCtrl.text.trim());
+    await prefs.setString('account_number', numCtrl.text.trim());
+    if (mounted) {
+      setState(() {
+        _accountBank = bankCtrl.text.trim();
+        _accountNumber = numCtrl.text.trim();
+      });
+    }
+  }
+
+  Future<void> _loadSettlement() async {
+    if (mounted) setState(() => _settlementLoading = true);
+    try {
+      // 전체 사용자 이름 맵 (user_id → name)
+      final allUsers = await ApiService.listAllUsers();
+      final userMap = { for (final u in allUsers) u['id'] as int: u['name'] as String };
+      final myName = userMap[widget.currentUserId] ?? '';
+
+      // _days에서 내가 참여한 날짜 추출 + 월 총 지출 계산
+      int monthlyTotal = 0;
+      final myDates = <String>[];
+      for (final day in _days) {
+        final users = (day['users'] as List).cast<Map<String, dynamic>>();
+        for (final u in users) {
+          if (u['user_name'] == myName) {
+            myDates.add(day['date'] as String);
+            monthlyTotal += u['amount'] as int;
+            break;
+          }
+        }
+      }
+      if (mounted) setState(() => _myMonthlyTotal = monthlyTotal);
+
+      final Map<String, int> toReceive = {};
+      final Map<String, int> toPay = {};
+
+      // 참여한 날짜별로만 selections 조회 → memo로 총무 판별
+      for (final dateStr in myDates) {
+        final selections = await ApiService.listSelectionsByDate(dateStr);
+
+        Map<String, dynamic>? treasurerSel;
+        try {
+          treasurerSel = selections.firstWhere((s) => s['memo'] == 'treasurer');
+        } catch (_) {}
+        if (treasurerSel == null) continue;
+
+        final treasurerId = treasurerSel['user_id'] as int;
+        final treasurerName = userMap[treasurerId] ?? '알수없음';
+
+        if (treasurerId == widget.currentUserId) {
+          // 내가 총무 → 다른 멤버들에게 받아야 할 금액
+          for (final sel in selections) {
+            if (sel['user_id'] == widget.currentUserId) continue;
+            final memberName = userMap[sel['user_id'] as int] ?? '알수없음';
+            toReceive[memberName] = (toReceive[memberName] ?? 0) + (sel['price'] as int);
+          }
+        } else {
+          // 다른 사람이 총무 → 내 금액만큼 줘야 함
+          try {
+            final mySel = selections.firstWhere((s) => s['user_id'] == widget.currentUserId);
+            toPay[treasurerName] = (toPay[treasurerName] ?? 0) + (mySel['price'] as int);
+          } catch (_) {}
+        }
+      }
+
+      if (mounted) setState(() {
+        _toReceive = toReceive;
+        _toPay = toPay;
+        _settlementLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _settlementLoading = false);
+    }
+  }
+
+  Future<void> _loadDayDetail(String dateKey) async {
+    if (mounted) setState(() => _treasurerName = null);
+    try {
+      final selections = await ApiService.listSelectionsByDate(dateKey);
+      final treasurerSel = selections.cast<Map<String, dynamic>?>().firstWhere(
+        (s) => s?['memo'] == 'treasurer',
+        orElse: () => null,
+      );
+      if (treasurerSel != null && mounted) {
+        final userId = treasurerSel['user_id'] as int;
+        final userData = await ApiService.getUser(userId);
+        if (mounted) setState(() => _treasurerName = userData['name'] as String);
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadData() async {
-    if (mounted) setState(() { _isLoading = true; _selectedDate = null; });
+    if (mounted) setState(() {
+      _isLoading = true;
+      _selectedDate = null;
+      _treasurerName = null;
+      _toReceive = {};
+      _toPay = {};
+    });
     try {
       final stats = await ApiService.getMonthlyStats(_year, _month);
       if (mounted) {
@@ -35,6 +212,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           _isLoading = false;
         });
       }
+      _loadSettlement(); // 백그라운드에서 정산 계산
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -104,6 +282,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _editAccount,
+        backgroundColor: const Color(0xFFFF6B35),
+        icon: const Icon(Icons.account_balance_outlined, color: Colors.white, size: 18),
+        label: Text(
+          _accountNumber.isEmpty ? '계좌 등록' : '계좌 수정',
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+        ),
+      ),
     );
   }
 
@@ -142,12 +329,167 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _buildSettlementCard(),
+        const SizedBox(height: 12),
         _buildCalendarGrid(),
         if (_selectedDate != null) ...[
           const SizedBox(height: 12),
           _buildDayDetail(_selectedDate!),
         ],
       ],
+    );
+  }
+
+  Widget _buildSettlementCard() {
+    final lastDay = DateTime(_year, _month + 1, 0).day;
+    final hasData = _toReceive.isNotEmpty || _toPay.isNotEmpty;
+
+    if (_settlementLoading) {
+      return const Card(
+        elevation: 0,
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Center(child: CircularProgressIndicator(color: Color(0xFFFF6B35), strokeWidth: 2)),
+        ),
+      );
+    }
+
+    if (!hasData) {
+      return Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              const Icon(Icons.receipt_long_outlined, size: 16, color: Color(0xFFFF6B35)),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: Text('이번달 정산',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+              ),
+              Text('정산일: $_month월 $lastDay일',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.receipt_long_outlined, size: 16, color: Color(0xFFFF6B35)),
+                const SizedBox(width: 6),
+                const Text('이번달 정산',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                if (_myMonthlyTotal > 0) ...[
+                  Text('내 지출 ',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                  Text('${formatPrice(_myMonthlyTotal)}원',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A))),
+                  const SizedBox(width: 8),
+                ],
+                if (_toReceive.isNotEmpty)
+                  GestureDetector(
+                    onTap: _copySettlementMessage,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFEDE5),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.copy, size: 12, color: Color(0xFFFF6B35)),
+                          SizedBox(width: 4),
+                          Text('메시지 복사', style: TextStyle(fontSize: 12, color: Color(0xFFFF6B35), fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 8),
+                Text('정산일: $_month월 $lastDay일',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+            if (_toReceive.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Text('받을 금액', style: TextStyle(fontSize: 13, color: Colors.grey[600], fontWeight: FontWeight.w600)),
+                  if (_accountNumber.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: '$_accountBank $_accountNumber'));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('계좌번호가 복사되었습니다'), duration: Duration(seconds: 1)),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFEDE5),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.copy, size: 11, color: Color(0xFFFF6B35)),
+                            const SizedBox(width: 4),
+                            Text('$_accountBank $_accountNumber',
+                                style: const TextStyle(fontSize: 11, color: Color(0xFFFF6B35), fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 6),
+              ..._toReceive.entries.map((e) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.arrow_downward, size: 13, color: Colors.green),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text(e.key, style: const TextStyle(fontSize: 13))),
+                    Text('${formatPrice(e.value)}원',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.green)),
+                  ],
+                ),
+              )),
+            ],
+            if (_toPay.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('줄 금액', style: TextStyle(fontSize: 13, color: Colors.grey[600], fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              ..._toPay.entries.map((e) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.arrow_upward, size: 13, color: Colors.red),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text('${e.key} (총무)', style: const TextStyle(fontSize: 13))),
+                    Text('${formatPrice(e.value)}원',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.red)),
+                  ],
+                ),
+              )),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -207,9 +549,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   return Expanded(
                     child: GestureDetector(
                       onTap: hasData
-                          ? () => setState(() {
-                                _selectedDate = isSelected ? null : dateKey;
-                              })
+                          ? () {
+                              final next = isSelected ? null : dateKey;
+                              setState(() { _selectedDate = next; _treasurerName = null; });
+                              if (next != null) _loadDayDetail(next);
+                            }
                           : null,
                       child: SizedBox(
                         height: cellHeight,
@@ -299,8 +643,31 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(label,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                ),
+                if (_treasurerName != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.account_balance_wallet_outlined,
+                          size: 14, color: Color(0xFFFF6B35)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '총무: $_treasurerName',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFFF6B35),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
             const SizedBox(height: 12),
             ...byRestaurant.entries.map((entry) {
               final restaurantName = entry.key;
