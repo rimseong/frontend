@@ -12,23 +12,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _controller = TextEditingController();
-  final _focusNode = FocusNode();
   bool _isLoading = false;
   String? _errorMessage;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNode.requestFocus();
-    });
-  }
-
-  @override
-  void dispose() {
-    _focusNode.dispose();
-    super.dispose();
-  }
 
   Future<void> _login() async {
     final name = _controller.text.trim();
@@ -95,8 +80,6 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 48),
               TextField(
                 controller: _controller,
-                focusNode: _focusNode,
-                autofocus: true,
                 keyboardType: TextInputType.text,
                 onSubmitted: (_) => _login(),
                 decoration: InputDecoration(

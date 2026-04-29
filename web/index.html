@@ -34,8 +34,8 @@
 </head>
 <body>
   <script>
-    // 사용자 첫 클릭 시 Flutter canvas에 포커스 부여 (capture 단계에서 처리)
-    document.addEventListener('click', function(e) {
+    // pointerdown(capture)에서 flt-glass-pane에 포커스 — Flutter가 이벤트 소비하기 전에 실행
+    document.addEventListener('pointerdown', function(e) {
       const pane = document.querySelector('flt-glass-pane');
       if (pane) {
         if (!pane.hasAttribute('tabindex')) {
