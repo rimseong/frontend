@@ -33,23 +33,17 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
-  <!-- 브라우저 포커스 활성화용 숨김 input -->
-  <input autofocus style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;">
   <script>
-    window.focus();
-
-    // Flutter 초기화 후 glass pane 포커스
-    const _observer = new MutationObserver(function() {
+    // 사용자 첫 클릭 시 Flutter canvas에 포커스 부여 (capture 단계에서 처리)
+    document.addEventListener('click', function(e) {
       const pane = document.querySelector('flt-glass-pane');
       if (pane) {
-        _observer.disconnect();
-        setTimeout(function() {
+        if (!pane.hasAttribute('tabindex')) {
           pane.setAttribute('tabindex', '0');
-          pane.focus();
-        }, 1000);
+        }
+        pane.focus();
       }
-    });
-    _observer.observe(document.body, { childList: true, subtree: true });
+    }, true);
 
     window.addEventListener('load', function(ev) {
       _flutter.loader.load({
