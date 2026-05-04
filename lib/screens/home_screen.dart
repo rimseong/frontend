@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/session.dart';
 import '../models/member.dart';
@@ -10,6 +11,7 @@ import '../services/api_service.dart';
 import '../data/restaurant_store.dart';
 import 'add_restaurant_screen.dart';
 import 'create_session_screen.dart';
+import 'login_screen.dart';
 import 'menu_selection_screen.dart';
 import 'result_screen.dart';
 import 'statistics_screen.dart';
@@ -933,10 +935,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 16),
+            padding: const EdgeInsets.only(right: 4),
             child: Center(
               child: Text(
-                '접속 이름: ${widget.currentUser.name}',
+                widget.currentUser.name,
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -944,6 +946,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout, size: 20, color: Colors.grey),
+            tooltip: '로그아웃',
+            onPressed: () async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove('login_date');
+              await prefs.remove('user_id');
+              await prefs.remove('user_name');
+              await prefs.remove('user_employee_no');
+              if (!mounted) return;
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+            },
           ),
         ],
       ),
