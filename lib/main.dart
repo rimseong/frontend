@@ -1,11 +1,10 @@
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'models/app_user.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
   runApp(const LunchPickApp());
 }
 
@@ -43,14 +42,15 @@ class _AppEntryState extends State<_AppEntry> {
   }
 
   Future<AppUser?> _getSavedUser() async {
-    final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now();
     final today = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    if (prefs.getString('login_date') != today) return null;
-    final id = prefs.getInt('user_id');
-    final name = prefs.getString('user_name');
-    final employeeNo = prefs.getString('user_employee_no');
-    if (id == null || name == null || employeeNo == null) return null;
+    if (html.window.localStorage['login_date'] != today) return null;
+    final idStr = html.window.localStorage['user_id'];
+    final name = html.window.localStorage['user_name'];
+    final employeeNo = html.window.localStorage['user_employee_no'];
+    if (idStr == null || name == null || employeeNo == null) return null;
+    final id = int.tryParse(idStr);
+    if (id == null) return null;
     return AppUser(id: id, name: name, employeeNo: employeeNo);
   }
 

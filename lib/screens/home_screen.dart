@@ -1,6 +1,6 @@
+import 'dart:html' as html;
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/session.dart';
 import '../models/member.dart';
@@ -950,13 +950,11 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.logout, size: 20, color: Colors.grey),
             tooltip: '로그아웃',
-            onPressed: () async {
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.remove('login_date');
-              await prefs.remove('user_id');
-              await prefs.remove('user_name');
-              await prefs.remove('user_employee_no');
-              if (!mounted) return;
+            onPressed: () {
+              html.window.localStorage.remove('login_date');
+              html.window.localStorage.remove('user_id');
+              html.window.localStorage.remove('user_name');
+              html.window.localStorage.remove('user_employee_no');
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(builder: (_) => const LoginScreen()),

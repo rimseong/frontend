@@ -1,6 +1,6 @@
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../utils/format.dart';
 
@@ -41,11 +41,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Future<void> _loadAccount() async {
-    final prefs = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
-        _accountBank = prefs.getString('account_bank') ?? '';
-        _accountNumber = prefs.getString('account_number') ?? '';
+        _accountBank = html.window.localStorage['account_bank'] ?? '';
+        _accountNumber = html.window.localStorage['account_number'] ?? '';
       });
     }
   }
@@ -104,9 +103,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       ),
     );
     if (result != true || !mounted) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('account_bank', bankCtrl.text.trim());
-    await prefs.setString('account_number', numCtrl.text.trim());
+    html.window.localStorage['account_bank'] = bankCtrl.text.trim();
+    html.window.localStorage['account_number'] = numCtrl.text.trim();
     if (mounted) {
       setState(() {
         _accountBank = bankCtrl.text.trim();

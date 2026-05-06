@@ -1,5 +1,5 @@
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_user.dart';
 import '../services/api_service.dart';
 import 'home_screen.dart';
@@ -41,13 +41,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       // 오늘 날짜로 로그인 정보 저장
-      final prefs = await SharedPreferences.getInstance();
       final now = DateTime.now();
       final today = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      await prefs.setString('login_date', today);
-      await prefs.setInt('user_id', user.id);
-      await prefs.setString('user_name', user.name);
-      await prefs.setString('user_employee_no', user.employeeNo);
+      html.window.localStorage['login_date'] = today;
+      html.window.localStorage['user_id'] = user.id.toString();
+      html.window.localStorage['user_name'] = user.name;
+      html.window.localStorage['user_employee_no'] = user.employeeNo;
 
       if (!mounted) return;
       Navigator.pushReplacement(
