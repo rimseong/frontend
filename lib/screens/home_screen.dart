@@ -1,4 +1,3 @@
-import 'dart:html' as html;
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -951,10 +950,6 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.logout, size: 20, color: Colors.grey),
             tooltip: '로그아웃',
             onPressed: () {
-              html.window.localStorage.remove('login_date');
-              html.window.localStorage.remove('user_id');
-              html.window.localStorage.remove('user_name');
-              html.window.localStorage.remove('user_employee_no');
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(builder: (_) => const LoginScreen()),

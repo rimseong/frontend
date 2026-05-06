@@ -1,4 +1,3 @@
-import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import '../models/app_user.dart';
 import '../services/api_service.dart';
@@ -33,22 +32,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (data != null) {
         userData = data;
       } else {
-        // 미등록 이름 → 신규 유저 생성
         userData = await ApiService.createUser(name);
       }
 
       final user = AppUser.fromJson(userData);
       if (!mounted) return;
 
-      // 오늘 날짜로 로그인 정보 저장
-      final now = DateTime.now();
-      final today = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      html.window.localStorage['login_date'] = today;
-      html.window.localStorage['user_id'] = user.id.toString();
-      html.window.localStorage['user_name'] = user.name;
-      html.window.localStorage['user_employee_no'] = user.employeeNo;
-
-      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => HomeScreen(currentUser: user)),
