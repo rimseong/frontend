@@ -29,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = false;
   bool _isNonParticipant = false;
   int? _nonParticipantSelectionId;
+  final List<Map<String, dynamic>> _nonParticipants = [];
 
   @override
   void initState() {
@@ -83,7 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadSessionsFromServer() async {
-    if (mounted) setState(() { _isNonParticipant = false; _nonParticipantSelectionId = null; });
+    if (mounted) setState(() { _isNonParticipant = false; _nonParticipantSelectionId = null; _nonParticipants.clear(); });
     try {
       final selections = await ApiService.listSelectionsToday();
       if (selections.isEmpty) return;
@@ -133,17 +134,29 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        // 미참여 식당이면 현재 사용자 상태 설정 후 세션 생성 스킵
+        // 미참여 식당이면 참여자 목록 수집 후 세션 생성 스킵
         if (restaurant.name == ApiService.nonParticipantName) {
           final currentUserId = widget.currentUser.id;
           for (final sel in restaurantSelections) {
-            if (sel['user_id'] == currentUserId) {
+            final userId = sel['user_id'] as int;
+            String userName = '사용자$userId';
+            try {
+              final userData = await ApiService.getUser(userId);
+              userName = userData['name'] as String;
+            } catch (_) {}
+            if (userId == currentUserId) {
               if (mounted) setState(() {
                 _isNonParticipant = true;
                 _nonParticipantSelectionId = sel['id'] as int?;
               });
-              break;
             }
+            if (mounted) setState(() {
+              _nonParticipants.add({
+                'userId': userId,
+                'userName': userName,
+                'selectionId': sel['id'] as int?,
+              });
+            });
           }
           continue;
         }
@@ -282,6 +295,12 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) setState(() {
         _isNonParticipant = true;
         _nonParticipantSelectionId = result['id'] as int?;
+        _nonParticipants.removeWhere((np) => np['userId'] == currentUser.id);
+        _nonParticipants.add({
+          'userId': currentUser.id,
+          'userName': currentUser.name,
+          'selectionId': result['id'] as int?,
+        });
       });
     } catch (_) {
       if (mounted) setState(() => _isNonParticipant = true);
@@ -297,6 +316,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() {
       _isNonParticipant = false;
       _nonParticipantSelectionId = null;
+      _nonParticipants.removeWhere((np) => np['userId'] == widget.currentUser.id);
     });
   }
 
@@ -1011,11 +1031,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                 onSelectTreasurer: () => _selectTreasurer(session),
                                 onEditPhone: (r) => _editRestaurantPhone(session, r),
                               )),
-                              if (_isNonParticipant)
-                                _NonParticipantCard(
-                                  userName: widget.currentUser.name,
-                                  onCancel: _cancelNonParticipant,
-                                ),
+                              ..._nonParticipants.map((np) => _NonParticipantCard(
+                                userName: np['userName'] as String,
+                                onCancel: (np['userId'] as int) == widget.currentUser.id
+                                    ? _cancelNonParticipant
+                                    : null,
+                              )),
                             ],
                           ),
                   ),
@@ -1070,9 +1091,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _NonParticipantCard extends StatelessWidget {
   final String userName;
-  final VoidCallback onCancel;
+  final VoidCallback? onCancel;
 
-  const _NonParticipantCard({required this.userName, required this.onCancel});
+  const _NonParticipantCard({required this.userName, this.onCancel});
 
   @override
   Widget build(BuildContext context) {
@@ -1105,16 +1126,17 @@ class _NonParticipantCard extends StatelessWidget {
                 ],
               ),
             ),
-            OutlinedButton(
-              onPressed: onCancel,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.grey[600],
-                side: BorderSide(color: Colors.grey[400]!),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            if (onCancel != null)
+              OutlinedButton(
+                onPressed: onCancel,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.grey[600],
+                  side: BorderSide(color: Colors.grey[400]!),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                child: const Text('취소', style: TextStyle(fontSize: 13)),
               ),
-              child: const Text('취소', style: TextStyle(fontSize: 13)),
-            ),
           ],
         ),
       ),
