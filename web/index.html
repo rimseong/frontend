@@ -45,25 +45,16 @@
       }
     }, true);
 
-    window.addEventListener('load', function(ev) {
-      // 기존 서비스워커 모두 제거 후 최신 파일 강제 로드
+    window.addEventListener('load', async function(ev) {
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-          var hadWorker = registrations.length > 0;
-          registrations.forEach(function(r) { r.unregister(); });
-          if (hadWorker) {
-            window.location.reload();
-            return;
-          }
-          _flutter.loader.load({
-            serviceWorkerSettings: { serviceWorkerVersion: null }
-          });
-        });
-      } else {
-        _flutter.loader.load({
-          serviceWorkerSettings: { serviceWorkerVersion: null }
-        });
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        if (registrations.length > 0) {
+          await Promise.all(registrations.map(function(r) { return r.unregister(); }));
+          window.location.reload();
+          return;
+        }
       }
+      _flutter.loader.load({});
     });
   </script>
   <script src="flutter_bootstrap.js" async></script>
