@@ -1,8 +1,8 @@
-import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart';
 import '../utils/format.dart';
+import '../utils/storage.dart';
 
 class StatisticsScreen extends StatefulWidget {
   final int currentUserId;
@@ -31,6 +31,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   String _accountBank = '';
   String _accountNumber = '';
 
+  // 팀원 계좌 목록 [{name, bank, number}]
+  List<Map<String, String>> _teamAccounts = [];
+
   static const _weekdayLabels = ['월', '화', '수', '목', '금', '토', '일'];
 
   @override
@@ -38,15 +41,51 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     super.initState();
     _loadData();
     _loadAccount();
+    _loadTeamAccounts();
   }
 
   Future<void> _loadAccount() async {
+    // 서버에서 내 dept 필드 읽어서 계좌 파싱 (로컬스토리지 fallback)
+    try {
+      final userData = await ApiService.getUser(widget.currentUserId);
+      final dept = userData['dept'] as String? ?? '';
+      if (dept.contains('|')) {
+        final parts = dept.split('|');
+        if (mounted) {
+          setState(() {
+            _accountBank = parts[0];
+            _accountNumber = parts.length > 1 ? parts[1] : '';
+          });
+        }
+        return;
+      }
+    } catch (_) {}
+    // 서버 실패 시 localStorage fallback
     if (mounted) {
       setState(() {
-        _accountBank = html.window.localStorage['account_bank'] ?? '';
-        _accountNumber = html.window.localStorage['account_number'] ?? '';
+        _accountBank = getLocalStorage('account_bank');
+        _accountNumber = getLocalStorage('account_number');
       });
     }
+  }
+
+  Future<void> _loadTeamAccounts() async {
+    try {
+      final allUsers = await ApiService.listAllUsers();
+      final accounts = <Map<String, String>>[];
+      for (final u in allUsers) {
+        final dept = u['dept'] as String? ?? '';
+        if (dept.contains('|')) {
+          final parts = dept.split('|');
+          accounts.add({
+            'name': u['name'] as String,
+            'bank': parts[0],
+            'number': parts.length > 1 ? parts[1] : '',
+          });
+        }
+      }
+      if (mounted) setState(() => _teamAccounts = accounts);
+    } catch (_) {}
   }
 
   void _copySettlementMessage() {
@@ -103,13 +142,21 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       ),
     );
     if (result != true || !mounted) return;
-    html.window.localStorage['account_bank'] = bankCtrl.text.trim();
-    html.window.localStorage['account_number'] = numCtrl.text.trim();
+    final bank = bankCtrl.text.trim();
+    final number = numCtrl.text.trim();
+    // 로컬 저장 (fallback)
+    setLocalStorage('account_bank', bank);
+    setLocalStorage('account_number', number);
+    // 서버 저장 (dept 필드에 "은행|계좌번호" 형식)
+    try {
+      await ApiService.updateUserDept(widget.currentUserId, '$bank|$number');
+    } catch (_) {}
     if (mounted) {
       setState(() {
-        _accountBank = bankCtrl.text.trim();
-        _accountNumber = numCtrl.text.trim();
+        _accountBank = bank;
+        _accountNumber = number;
       });
+      _loadTeamAccounts(); // 팀원 계좌 목록 갱신
     }
   }
 
@@ -329,12 +376,97 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       children: [
         _buildSettlementCard(),
         const SizedBox(height: 12),
+        _buildTeamAccountsCard(),
+        const SizedBox(height: 12),
         _buildCalendarGrid(),
         if (_selectedDate != null) ...[
           const SizedBox(height: 12),
           _buildDayDetail(_selectedDate!),
         ],
       ],
+    );
+  }
+
+  Widget _buildTeamAccountsCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.account_balance_outlined, size: 16, color: Color(0xFFFF6B35)),
+                SizedBox(width: 6),
+                Text('팀원 계좌',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (_teamAccounts.isEmpty)
+              Text(
+                '아직 등록된 계좌가 없어요.\n아래 "계좌 등록" 버튼을 눌러 내 계좌를 등록하면 팀원들에게 공개됩니다.',
+                style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+              )
+            else
+              ..._teamAccounts.map((acc) {
+                final display = '${acc['bank']} ${acc['number']}';
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(acc['name']!,
+                                style: const TextStyle(
+                                    fontSize: 13, fontWeight: FontWeight.w600)),
+                            Text(display,
+                                style: TextStyle(
+                                    fontSize: 12, color: Colors.grey[600])),
+                          ],
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: display));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('${acc['name']} 계좌가 복사되었습니다'),
+                              duration: const Duration(seconds: 1),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFEDE5),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.copy, size: 12, color: Color(0xFFFF6B35)),
+                              SizedBox(width: 4),
+                              Text('복사',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFFFF6B35),
+                                      fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+          ],
+        ),
+      ),
     );
   }
 
@@ -472,18 +604,67 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               const SizedBox(height: 12),
               Text('줄 금액', style: TextStyle(fontSize: 13, color: Colors.grey[600], fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),
-              ..._toPay.entries.map((e) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  children: [
-                    const Icon(Icons.arrow_upward, size: 13, color: Colors.red),
-                    const SizedBox(width: 6),
-                    Expanded(child: Text('${e.key} (총무)', style: const TextStyle(fontSize: 13))),
-                    Text('${formatPrice(e.value)}원',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.red)),
-                  ],
-                ),
-              )),
+              ..._toPay.entries.map((e) {
+                final acc = _teamAccounts.cast<Map<String, String>?>().firstWhere(
+                  (a) => a?['name'] == e.key,
+                  orElse: () => null,
+                );
+                final accDisplay = acc != null ? '${acc['bank']} ${acc['number']}' : null;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.arrow_upward, size: 13, color: Colors.red),
+                          const SizedBox(width: 6),
+                          Expanded(child: Text('${e.key} (총무)', style: const TextStyle(fontSize: 13))),
+                          Text('${formatPrice(e.value)}원',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.red)),
+                        ],
+                      ),
+                      if (accDisplay != null) ...[
+                        const SizedBox(height: 4),
+                        GestureDetector(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: accDisplay));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('${e.key} 계좌가 복사되었습니다'),
+                                duration: const Duration(seconds: 1),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 19),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.red[50],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.copy, size: 11, color: Colors.red[300]),
+                                const SizedBox(width: 4),
+                                Text(accDisplay,
+                                    style: TextStyle(fontSize: 11, color: Colors.red[400], fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 2),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 19),
+                          child: Text('계좌 미등록', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              }),
             ],
           ],
         ),
