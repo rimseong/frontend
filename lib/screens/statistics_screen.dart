@@ -79,10 +79,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       final accounts = <Map<String, String>>[];
       for (final u in allUsers) {
         final dept = u['dept'] as String? ?? '';
+        final name = u['name'] as String? ?? '';
+        if ((u['id'] as int) == widget.currentUserId && _currentUserName.isEmpty && name.isNotEmpty) {
+          if (mounted) setState(() => _currentUserName = name);
+        }
         if (dept.contains('|')) {
           final parts = dept.split('|');
           accounts.add({
-            'name': u['name'] as String,
+            'name': name,
             'bank': parts[0],
             'number': parts.length > 1 ? parts[1] : '',
           });
@@ -152,20 +156,37 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     setLocalStorage('account_bank', bank);
     setLocalStorage('account_number', number);
     // 서버 저장 (dept 필드에 "은행|계좌번호" 형식)
+    bool serverSaveOk = false;
     try {
       await ApiService.updateUserDept(widget.currentUserId, '$bank|$number');
-    } catch (_) {}
-    if (mounted) {
+      serverSaveOk = true;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('서버 저장에 실패했습니다. 다시 시도해 주세요.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+    if (!mounted) return;
+    if (serverSaveOk) {
       setState(() {
         _accountBank = bank;
         _accountNumber = number;
-        // 저장 즉시 팀원 계좌 목록에 반영
         _teamAccounts.removeWhere((a) => a['name'] == _currentUserName);
         if (_currentUserName.isNotEmpty && (bank.isNotEmpty || number.isNotEmpty)) {
           _teamAccounts.add({'name': _currentUserName, 'bank': bank, 'number': number});
         }
       });
-      _loadTeamAccounts(); // 서버에서 전체 목록 갱신
+      _loadTeamAccounts();
+    } else {
+      setState(() {
+        _accountBank = bank;
+        _accountNumber = number;
+      });
     }
   }
 
