@@ -28,6 +28,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   int _myMonthlyTotal = 0;
 
   // 내 계좌
+  String _currentUserName = '';
   String _accountBank = '';
   String _accountNumber = '';
 
@@ -49,16 +50,19 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     try {
       final userData = await ApiService.getUser(widget.currentUserId);
       final dept = userData['dept'] as String? ?? '';
+      final name = userData['name'] as String? ?? '';
       if (dept.contains('|')) {
         final parts = dept.split('|');
         if (mounted) {
           setState(() {
+            _currentUserName = name;
             _accountBank = parts[0];
             _accountNumber = parts.length > 1 ? parts[1] : '';
           });
         }
         return;
       }
+      if (mounted) setState(() => _currentUserName = name);
     } catch (_) {}
     // 서버 실패 시 localStorage fallback
     if (mounted) {
@@ -155,8 +159,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       setState(() {
         _accountBank = bank;
         _accountNumber = number;
+        // 저장 즉시 팀원 계좌 목록에 반영
+        _teamAccounts.removeWhere((a) => a['name'] == _currentUserName);
+        if (_currentUserName.isNotEmpty && (bank.isNotEmpty || number.isNotEmpty)) {
+          _teamAccounts.add({'name': _currentUserName, 'bank': bank, 'number': number});
+        }
       });
-      _loadTeamAccounts(); // 팀원 계좌 목록 갱신
+      _loadTeamAccounts(); // 서버에서 전체 목록 갱신
     }
   }
 
