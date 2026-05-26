@@ -26730,19 +26730,27 @@ s=1
 break
 case 1:return A.G(q,r)}})
 return A.H($async$a0M,r)},
-Jk(a,b){var s=0,r=A.I(t.H),q,p,o,n,m,l
+Jk(a,b){var s=0,r=A.I(t.H),q,p,o,n,m,l,k,j,i
 var $async$Jk=A.J(function(c,d){if(c===1)return A.F(d,r)
 for(;;)switch(s){case 0:s=2
 return A.z(A.oJ(a),$async$Jk)
-case 2:q=d
-p=A.cz(A.e2()+"/users/"+a,0,null)
-o=t.N
-n=A.al(["Content-Type","application/json"],o,o)
-m=J.aF(q)
+case 2:n=d
+m=A.cz(A.e2()+"/users/"+a,0,null)
+l=t.N
+k=A.al(["Content-Type","application/json"],l,l)
+j=J.aF(n)
+i=j.h(n,"name")
+if(i==null)i=""
+q=j.h(n,"employee_no")
+if(q==null)q=j.h(n,"name")
+if(q==null)q=""
+p=j.h(n,"email")
+if(p==null)p=""
+j=j.h(n,"role")
 s=3
-return A.z(A.azp(p,B.a5.lh(A.al(["name",m.h(q,"name"),"dept",b,"employee_no",m.h(q,"employee_no"),"email",m.h(q,"email")],o,t.z),null),n),$async$Jk)
-case 3:l=d
-if(l.b!==200)throw A.e(A.c2("\uc0ac\uc6a9\uc790 \uc815\ubcf4 \uc218\uc815 \uc2e4\ud328: "+l.ge0(0)))
+return A.z(A.azp(m,B.a5.lh(A.al(["name",i,"dept",b,"employee_no",q,"email",p,"role",j==null?"user":j],l,t.z),null),k),$async$Jk)
+case 3:o=d
+if(o.b!==200)throw A.e(A.c2("\uc0ac\uc6a9\uc790 \uc815\ubcf4 \uc218\uc815 \uc2e4\ud328: "+o.ge0(0)))
 return A.G(null,r)}})
 return A.H($async$Jk,r)},
 Jf(a){var s=0,r=A.I(t.P),q,p,o,n,m

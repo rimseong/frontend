@@ -71,10 +71,11 @@ class ApiService {
       Uri.parse('$_base/users/$userId'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
-        'name': userData['name'],
+        'name': userData['name'] ?? '',
         'dept': dept,
-        'employee_no': userData['employee_no'],
-        'email': userData['email'],
+        'employee_no': userData['employee_no'] ?? userData['name'] ?? '',
+        'email': userData['email'] ?? '',
+        'role': userData['role'] ?? 'user',
       }),
     );
     if (res.statusCode != 200) throw Exception('사용자 정보 수정 실패: ${res.body}');
