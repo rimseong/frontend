@@ -163,10 +163,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('서버 저장에 실패했습니다. 다시 시도해 주세요.'),
+          SnackBar(
+            content: Text('서버 저장 실패: $e'),
             backgroundColor: Colors.red,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 5),
           ),
         );
       }
