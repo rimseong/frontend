@@ -41,8 +41,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   void initState() {
     super.initState();
     _loadData();
-    _loadAccount();
-    _loadTeamAccounts();
+    _loadAccountThenTeam();
+  }
+
+  Future<void> _loadAccountThenTeam() async {
+    await _loadAccount();
+    await _loadTeamAccounts();
   }
 
   Future<void> _loadAccount() async {
@@ -74,15 +78,22 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Future<void> _loadTeamAccounts() async {
+    final accounts = <Map<String, String>>[];
+
+    // 현재 사용자 계좌는 localStorage에서 읽어 맨 앞에 추가
+    final localBank = getLocalStorage('account_bank');
+    final localNumber = getLocalStorage('account_number');
+    if (_currentUserName.isNotEmpty && (localBank.isNotEmpty || localNumber.isNotEmpty)) {
+      accounts.add({'name': _currentUserName, 'bank': localBank, 'number': localNumber});
+    }
+
+    // 다른 팀원 계좌는 서버 dept 필드에서 로드
     try {
       final allUsers = await ApiService.listAllUsers();
-      final accounts = <Map<String, String>>[];
       for (final u in allUsers) {
+        if ((u['id'] as int) == widget.currentUserId) continue;
         final dept = u['dept'] as String? ?? '';
         final name = u['name'] as String? ?? '';
-        if ((u['id'] as int) == widget.currentUserId && _currentUserName.isEmpty && name.isNotEmpty) {
-          if (mounted) setState(() => _currentUserName = name);
-        }
         if (dept.contains('|')) {
           final parts = dept.split('|');
           accounts.add({
@@ -92,8 +103,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           });
         }
       }
-      if (mounted) setState(() => _teamAccounts = accounts);
     } catch (_) {}
+
+    if (mounted) setState(() => _teamAccounts = accounts);
   }
 
   void _copySettlementMessage() {
@@ -156,38 +168,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     setLocalStorage('account_bank', bank);
     setLocalStorage('account_number', number);
     // 서버 저장 (dept 필드에 "은행|계좌번호" 형식)
-    bool serverSaveOk = false;
-    try {
-      await ApiService.updateUserDept(widget.currentUserId, '$bank|$number');
-      serverSaveOk = true;
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('서버 저장 실패: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-    }
     if (!mounted) return;
-    if (serverSaveOk) {
-      setState(() {
-        _accountBank = bank;
-        _accountNumber = number;
-        _teamAccounts.removeWhere((a) => a['name'] == _currentUserName);
-        if (_currentUserName.isNotEmpty && (bank.isNotEmpty || number.isNotEmpty)) {
-          _teamAccounts.add({'name': _currentUserName, 'bank': bank, 'number': number});
-        }
-      });
-      _loadTeamAccounts();
-    } else {
-      setState(() {
-        _accountBank = bank;
-        _accountNumber = number;
-      });
-    }
+    setState(() {
+      _accountBank = bank;
+      _accountNumber = number;
+      _teamAccounts.removeWhere((a) => a['name'] == _currentUserName);
+      if (_currentUserName.isNotEmpty && (bank.isNotEmpty || number.isNotEmpty)) {
+        _teamAccounts.add({'name': _currentUserName, 'bank': bank, 'number': number});
+      }
+    });
   }
 
   Future<void> _loadSettlement() async {
