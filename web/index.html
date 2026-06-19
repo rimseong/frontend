@@ -34,13 +34,22 @@
 </head>
 <body>
   <script>
-    // pointerdown(capture)에서 flt-glass-pane에 포커스 — Flutter가 이벤트 소비하기 전에 실행
+    // flt-glass-pane이 DOM에 나타나면 즉시 포커스 → 첫 로드부터 키보드 입력 가능
+    const _glassObserver = new MutationObserver(function() {
+      const pane = document.querySelector('flt-glass-pane');
+      if (pane) {
+        if (!pane.hasAttribute('tabindex')) pane.setAttribute('tabindex', '0');
+        pane.focus();
+        _glassObserver.disconnect();
+      }
+    });
+    _glassObserver.observe(document.body, { childList: true, subtree: true });
+
+    // 클릭할 때도 포커스 유지 (안전망)
     document.addEventListener('pointerdown', function(e) {
       const pane = document.querySelector('flt-glass-pane');
       if (pane) {
-        if (!pane.hasAttribute('tabindex')) {
-          pane.setAttribute('tabindex', '0');
-        }
+        if (!pane.hasAttribute('tabindex')) pane.setAttribute('tabindex', '0');
         pane.focus();
       }
     }, true);
